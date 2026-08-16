@@ -1,1 +1,515 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Administrasi Guru (Offline)</title>
 
+    <!-- Framework & Library UI/CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+
+    <!-- Library Database Lokal (Dexie.js untuk IndexedDB) & SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding-bottom: 60px;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card-menu {
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .card-menu:hover {
+            transform: translateY(-3px);
+        }
+        .nav-bottom {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #ffffff;
+            border-top: 1px solid #dee2e6;
+            z-index: 1000;
+        }
+        .nav-bottom .nav-link {
+            font-size: 0.75rem;
+            color: #6c757d;
+            text-align: center;
+            padding: 8px 0;
+        }
+        .nav-bottom .nav-link.active {
+            color: #0d6efd;
+            font-weight: bold;
+        }
+        .nav-bottom i {
+            font-size: 1.25rem;
+            display: block;
+        }
+        .section-page {
+            display: none;
+        }
+        .section-page.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Navbar -->
+    <nav class="navbar navbar-dark bg-primary sticky-top shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1"><i class="bi bi-journal-bookmark-fill me-2"></i>Admin Guru Offline</span>
+            <span class="badge bg-light text-primary" id="statusPenyimpanan">Lokal (HP)</span>
+        </div>
+    </nav>
+
+    <!-- Konten Utama -->
+    <div class="container mt-3">
+
+        <!-- 1. HALAMAN BERANDA / DASHBOARD -->
+        <div id="page-dashboard" class="section-page active">
+            <div class="alert alert-primary d-flex align-items-center shadow-sm" role="alert">
+                <i class="bi bi-info-circle-fill me-2 fs-4"></i>
+                <div>
+                    Selamat Datang! Data disimpan secara otomatis di memori internal HP Anda.
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="card card-menu bg-info text-white shadow-sm p-3" onclick="switchPage('siswa')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">Data Siswa</h6>
+                                <h3 class="mb-0" id="dashTotalSiswa">0</h3>
+                            </div>
+                            <i class="bi bi-people-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card card-menu bg-success text-white shadow-sm p-3" onclick="switchPage('absensi')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">Absensi Hari Ini</h6>
+                                <h3 class="mb-0" id="dashTotalAbsen">0</h3>
+                            </div>
+                            <i class="bi bi-calendar-check-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. HALAMAN DATA SISWA -->
+        <div id="page-siswa" class="section-page">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="bi bi-people me-2"></i>Data Siswa</h4>
+                <button class="btn btn-primary btn-sm" onclick="modalSiswa()"><i class="bi bi-plus-lg me-1"></i>Tambah Siswa</button>
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>NIS</th>
+                                    <th>Nama</th>
+                                    <th>Kelas</th>
+                                    <th class="text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelSiswaBody">
+                                <tr><td colspan="4" class="text-center text-muted p-3">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. HALAMAN ABSENSI -->
+        <div id="page-absensi" class="section-page">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4><i class="bi bi-calendar-check me-2"></i>Input Absensi</h4>
+                <input type="date" id="tglAbsensi" class="form-control form-control-sm w-auto" onchange="muatAbsensi()">
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nama Siswa</th>
+                                    <th class="text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabelAbsensiBody">
+                                <tr><td colspan="2" class="text-center text-muted p-3">Memuat data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-end">
+                    <button class="btn btn-success" onclick="simpanAbsensi()"><i class="bi bi-save me-1"></i>Simpan Absensi</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. HALAMAN BACKUP & RESTORE (PENGATURAN) -->
+        <div id="page-pengaturan" class="section-page">
+            <h4 class="mb-3"><i class="bi bi-gear me-2"></i>Pengaturan & Pemeliharaan</h4>
+
+            <!-- Card Backup & Restore -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0"><i class="bi bi-database-fill-gear me-2 text-primary"></i>Backup & Restore Data</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">Karena data disimpan di HP Anda, disarankan untuk melakukan <b>Backup Data</b> secara berkala agar tidak hilang saat HP diganti atau di-reset.</p>
+
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <button class="btn btn-success w-100 py-2" onclick="backupDataLokal()">
+                                <i class="bi bi-download me-2"></i>Backup (Unduh File .json)
+                            </button>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="btn btn-warning w-100 py-2 mb-0">
+                                <i class="bi bi-upload me-2"></i>Restore (Unggah File .json)
+                                <input type="file" id="inputRestoreFile" accept=".json" onchange="restoreDataLokal(event)" style="display: none;">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Hapus Semua Data -->
+            <div class="card shadow-sm border-danger">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-danger mb-0">Reset Semua Data</h6>
+                        <small class="text-muted">Menghapus seluruh database dari penyimpanan HP ini.</small>
+                    </div>
+                    <button class="btn btn-outline-danger btn-sm" onclick="resetDatabase()"><i class="bi bi-trash me-1"></i>Reset</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Navigation Bar Bawah (Mobile Menu) -->
+    <div class="nav-bottom shadow-lg">
+        <div class="row g-0">
+            <div class="col">
+                <a class="nav-link active" id="nav-dashboard" onclick="switchPage('dashboard')">
+                    <i class="bi bi-house-door"></i>
+                    <span>Beranda</span>
+                </a>
+            </div>
+            <div class="col">
+                <a class="nav-link" id="nav-siswa" onclick="switchPage('siswa')">
+                    <i class="bi bi-people"></i>
+                    <span>Siswa</span>
+                </a>
+            </div>
+            <div class="col">
+                <a class="nav-link" id="nav-absensi" onclick="switchPage('absensi')">
+                    <i class="bi bi-calendar-check"></i>
+                    <span>Absensi</span>
+                </a>
+            </div>
+            <div class="col">
+                <a class="nav-link" id="nav-pengaturan" onclick="switchPage('pengaturan')">
+                    <i class="bi bi-gear"></i>
+                    <span>Backup</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIKA JAVASCRIPT & DATABASE LOKAL -->
+    <script>
+        // ==========================================
+        // 1. INISIALISASI DATABASE LOKAL (IndexedDB via Dexie)
+        // ==========================================
+        const db = new Dexie("AppGuruDB");
+        db.version(1).stores({
+            siswa: '++id, nis, nama, kelas',
+            absensi: '++id, siswa_id, tanggal, status',
+            nilai: '++id, siswa_id, mapel, nilai, tanggal',
+            pengaturan: 'key, value'
+        });
+
+        // Set Default Tanggal Hari Ini pada Absensi
+        document.getElementById('tglAbsensi').value = new Date().toISOString().slice(0, 10);
+
+        // Event listener saat dokumen siap
+        document.addEventListener('DOMContentLoaded', () => {
+            muatDashboard();
+        });
+
+        // ==========================================
+        // 2. NAVIGASI HALAMAN (SINGLE PAGE APP)
+        // ==========================================
+        function switchPage(pageId) {
+            document.querySelectorAll('.section-page').forEach(page => page.classList.remove('active'));
+            document.querySelectorAll('.nav-bottom .nav-link').forEach(nav => nav.classList.remove('active'));
+
+            document.getElementById(`page-${pageId}`).classList.add('active');
+            document.getElementById(`nav-${pageId}`).classList.add('active');
+
+            if (pageId === 'dashboard') muatDashboard();
+            if (pageId === 'siswa') muatSiswa();
+            if (pageId === 'absensi') muatAbsensi();
+        }
+
+        // ==========================================
+        // 3. LOGIKA DASHBOARD & DATA SISWA
+        // ==========================================
+        async function muatDashboard() {
+            const totalSiswa = await db.siswa.count();
+            const tglHariIni = new Date().toISOString().slice(0, 10);
+            const totalAbsen = await db.absensi.where('tanggal').equals(tglHariIni).count();
+
+            document.getElementById('dashTotalSiswa').innerText = totalSiswa;
+            document.getElementById('dashTotalAbsen').innerText = totalAbsen;
+        }
+
+        async function muatSiswa() {
+            const tbody = document.getElementById('tabelSiswaBody');
+            tbody.innerHTML = '';
+            const listSiswa = await db.siswa.toArray();
+
+            if (listSiswa.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted p-3">Belum ada data siswa. Silakan tambah data.</td></tr>`;
+                return;
+            }
+
+            listSiswa.forEach(siswa => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${siswa.nis}</td>
+                    <td><b>${siswa.nama}</b></td>
+                    <td><span class="badge bg-secondary">${siswa.kelas}</span></td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-danger" onclick="hapusSiswa(${siswa.id})"><i class="bi bi-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function modalSiswa() {
+            const { value: formValues } = await Swal.fire({
+                title: 'Tambah Siswa',
+                html:
+                    '<input id="swal-nis" class="swal2-input" placeholder="NIS">' +
+                    '<input id="swal-nama" class="swal2-input" placeholder="Nama Lengkap">' +
+                    '<input id="swal-kelas" class="swal2-input" placeholder="Kelas (misal: 10-A)">',
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Simpan',
+                cancelButtonText: 'Batal',
+                preConfirm: () => {
+                    return [
+                        document.getElementById('swal-nis').value,
+                        document.getElementById('swal-nama').value,
+                        document.getElementById('swal-kelas').value
+                    ]
+                }
+            });
+
+            if (formValues && formValues[1]) {
+                await db.siswa.add({
+                    nis: formValues[0],
+                    nama: formValues[1],
+                    kelas: formValues[2]
+                });
+                Swal.fire('Berhasil', 'Data siswa disimpan secara lokal!', 'success');
+                muatSiswa();
+            }
+        }
+
+        async function hapusSiswa(id) {
+            const confirm = await Swal.fire({
+                title: 'Hapus Siswa?',
+                text: "Data yang dihapus tidak bisa dikembalikan!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Hapus'
+            });
+
+            if (confirm.isConfirmed) {
+                await db.siswa.delete(id);
+                muatSiswa();
+            }
+        }
+
+        // ==========================================
+        // 4. LOGIKA ABSENSI
+        // ==========================================
+        async function muatAbsensi() {
+            const tgl = document.getElementById('tglAbsensi').value;
+            const tbody = document.getElementById('tabelAbsensiBody');
+            tbody.innerHTML = '';
+
+            const listSiswa = await db.siswa.toArray();
+            if (listSiswa.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" class="text-center text-muted p-3">Tambahkan data siswa terlebih dahulu pada menu Siswa.</td></tr>`;
+                return;
+            }
+
+            const dataAbsen = await db.absensi.where('tanggal').equals(tgl).toArray();
+
+            listSiswa.forEach(siswa => {
+                const absenExisting = dataAbsen.find(a => a.siswa_id === siswa.id);
+                const status = absenExisting ? absenExisting.status : 'Hadir';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><b>${siswa.nama}</b><br><small class="text-muted">${siswa.kelas}</small></td>
+                    <td class="text-center">
+                        <select class="form-select form-select-sm status-absen" data-siswa-id="${siswa.id}">
+                            <option value="Hadir" ${status === 'Hadir' ? 'selected' : ''}>Hadir</option>
+                            <option value="Izin" ${status === 'Izin' ? 'selected' : ''}>Izin</option>
+                            <option value="Sakit" ${status === 'Sakit' ? 'selected' : ''}>Sakit</option>
+                            <option value="Alpha" ${status === 'Alpha' ? 'selected' : ''}>Alpha</option>
+                        </select>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function simpanAbsensi() {
+            const tgl = document.getElementById('tglAbsensi').value;
+            const selects = document.querySelectorAll('.status-absen');
+
+            await db.transaction('rw', db.absensi, async () => {
+                for (let select of selects) {
+                    const siswaId = parseInt(select.getAttribute('data-siswa-id'));
+                    const statusVal = select.value;
+
+                    // Hapus absen lama di tanggal yang sama untuk mencegah duplikasi
+                    await db.absensi.where({ siswa_id: siswaId, tanggal: tgl }).delete();
+
+                    // Simpan data baru
+                    await db.absensi.add({
+                        siswa_id: siswaId,
+                        tanggal: tgl,
+                        status: statusVal
+                    });
+                }
+            });
+
+            Swal.fire('Berhasil', 'Absensi berhasil disimpan!', 'success');
+        }
+
+        // ==========================================
+        // 5. FITUR BACKUP & RESTORE DATA LOKAL
+        // ==========================================
+
+        // FUNGSI BACKUP (Ekspor ke file JSON)
+        async function backupDataLokal() {
+            try {
+                const backupObj = {
+                    siswa: await db.siswa.toArray(),
+                    absensi: await db.absensi.toArray(),
+                    nilai: await db.nilai.toArray(),
+                    pengaturan: await db.pengaturan.toArray(),
+                    tanggalExport: new Date().toISOString()
+                };
+
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
+                const downloadAnchor = document.createElement('a');
+
+                const timeStamp = new Date().toISOString().slice(0, 10);
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `Backup_AppGuru_${timeStamp}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+
+                Swal.fire('Berhasil', 'File backup (.json) berhasil diunduh ke penyimpanan HP Anda.', 'success');
+            } catch (err) {
+                Swal.fire('Error', 'Gagal membuat file backup: ' + err.message, 'error');
+            }
+        }
+
+        // FUNGSI RESTORE (Impor dari file JSON)
+        async function restoreDataLokal(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    if (!data.siswa || !data.absensi) {
+                        throw new Error("Struktur file backup tidak valid!");
+                    }
+
+                    const konfirmasi = await Swal.fire({
+                        title: 'Restore Data?',
+                        text: "Data yang ada saat ini akan digantikan seluruhnya oleh data dari file backup ini!",
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, Timpa Data',
+                        cancelButtonText: 'Batal'
+                    });
+
+                    if (konfirmasi.isConfirmed) {
+                        // Timpa seluruh isi database
+                        await db.transaction('rw', db.siswa, db.absensi, db.nilai, db.pengaturan, async () => {
+                            await db.siswa.clear();
+                            await db.absensi.clear();
+                            await db.nilai.clear();
+                            await db.pengaturan.clear();
+
+                            if (data.siswa.length) await db.siswa.bulkAdd(data.siswa);
+                            if (data.absensi.length) await db.absensi.bulkAdd(data.absensi);
+                            if (data.nilai.length) await db.nilai.bulkAdd(data.nilai);
+                            if (data.pengaturan && data.pengaturan.length) await db.pengaturan.bulkAdd(data.pengaturan);
+                        });
+
+                        Swal.fire('Berhasil', 'Data berhasil dipulihkan!', 'success').then(() => {
+                            location.reload();
+                        });
+                    }
+                } catch (err) {
+                    Swal.fire('Gagal Restore', 'File JSON tidak valid atau rusak: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // FUNGSI RESET DATABASE
+        async function resetDatabase() {
+            const confirm = await Swal.fire({
+                title: 'Hapus Seluruh Data?',
+                text: "Semua data siswa dan absensi di HP ini akan terhapus secara permanen!",
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Ya, Reset Semua'
+            });
+
+            if (confirm.isConfirmed) {
+                await db.delete();
+                Swal.fire('Terhapus', 'Database berhasil dibersihkan.', 'success').then(() => {
+                    location.reload();
+                });
+            }
+        }
+    </script>
+</body>
+</html>
