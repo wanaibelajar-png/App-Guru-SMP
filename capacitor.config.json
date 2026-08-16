@@ -1,0 +1,6 @@
+{
+  "appId": "com.onei.appguru",
+  "appName": "Administrasi Guru",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
